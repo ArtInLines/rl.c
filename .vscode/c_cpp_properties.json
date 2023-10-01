@@ -1,0 +1,11 @@
+{
+	"configurations": [
+		{
+			"includePath": ["deps/QuelSolaar", "C:\\Program Files\\vcpkg\\installed\\x64-windows\\include"],
+			"intelliSenseMode": "windows-gcc-x64",
+			"compilerPath": "C:\\MinGW\\bin\\gcc.exe",
+			"cStandard": "c99"
+		}
+	],
+	"version": 4
+}
