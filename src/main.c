@@ -1,31 +1,40 @@
-#include <stdio.h>
+#include <stdint.h>  // For specifically sized ints
+#include <stdbool.h> // For boolean definitions
+#include <stdio.h>   // For printf - only used for debugging
+#include <assert.h>  // For assert
+#include <string.h>  // For memcpy
 #include "raylib.h"
 #include "hpdf.h"
 
 int main(void)
 {
-    InitWindow(800, 450, "raylib [core] example - basic window");
+    int32_t win_width  = 1200;
+    int32_t win_height = 600;
 
-    HPDF_Doc pdf = HPDF_New(NULL, NULL);
-    if (!pdf) {
-        printf ("ERROR: cannot create pdf object.\n");
-        return 1;
-    }
-    HPDF_Page page_1 = HPDF_AddPage(pdf);
-    HPDF_Page_SetSize(page_1, HPDF_PAGE_SIZE_A4, HPDF_PAGE_PORTRAIT);
-    HPDF_Page_BeginText(page_1);
-    HPDF_SaveToFile(pdf, "test.pdf");
-    HPDF_Free(pdf);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(win_width, win_height, "RL");
+    SetTargetFPS(60);
 
-    while (!WindowShouldClose())
-    {
+    float size = 50;
+    float spacing = 2;
+    Font font = LoadFontEx("./assets/Roboto-Regular.ttf", size, NULL, 95);
+
+    while (!WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) {
         BeginDrawing();
-            ClearBackground(RAYWHITE);
-            DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
+
+        if (IsWindowResized()) {
+            win_width  = GetScreenWidth();
+            win_height = GetScreenHeight();
+        }
+        ClearBackground(BLACK);
+
+        char* text = "Reading List";
+        Vector2 v = MeasureTextEx(font, text, size, spacing);
+        DrawTextEx(font, text, (Vector2){.x = (win_width - v.x)/2, .y = (win_height - size)/2}, size, spacing, WHITE);
+
         EndDrawing();
     }
 
     CloseWindow();
-
     return 0;
 }
