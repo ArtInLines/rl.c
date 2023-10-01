@@ -1,8 +1,0 @@
-{
-	"magicmember" : "DocGenProfile",
-	"name" : "Eulum",
-	"owner" : "Connor Worthington",
-	"todo" : "connor_todo.txt",
-	"deprecation_define" : "NONE",
-	"help" : "orbital_help",
-}
