@@ -13,7 +13,7 @@ typedef enum __attribute__((__packed__)) {
 } Datatype;
 
 typedef union {
-    char** strs; // For Select or Tag
+    String_View *strs; // For Select or Tag
 } Type_Opts;
 
 typedef struct {
@@ -30,9 +30,16 @@ typedef struct {
     i16 year;  // Negative years are BC
 } Value_Date;
 
+typedef union {
+    Value_Str    *strs;
+    Value_Select *selects;
+    Value_Tag    *tags;
+    Value_Date   *dates;
+} Values;
+
 typedef struct {
     Column *cols; // List of columns
-    void  **vals; // List of values in Column-Major order, so all values in vals[i] are of the same type
+    Values *vals; // List of values in Column-Major order, so all values in vals[i] are of the same type
 } Table;
 
 typedef struct {

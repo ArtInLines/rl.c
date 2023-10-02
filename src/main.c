@@ -26,74 +26,133 @@
 
 Table readTabFile(const char *fpath)
 {
-    u64 size;
-    char* buf = util_readFile(fpath, &size);
+    Buffer buf = buf_fromFile(fpath);
     Table tab = { .cols = NULL, .vals = NULL };
-
-    // @TODO: Parse file as Table
-
-    free(buf);
+    i32 colslen = buf_read4i(&buf);
+    stbds_arrsetcap(tab.cols, colslen);
+    stbds_arrsetcap(tab.vals, colslen);
+    for (i32 i = 0; i < colslen; i++) {
+        tab.cols[i] = buf_readColumn(&buf);
+    }
+    i32 rowslen = buf_read4i(&buf);
+    for (i32 c = 0; c < colslen; c++) {
+        switch (tab.cols[c].type)
+        {
+        case TYPE_STR:
+            stbds_arrsetcap(tab.vals[c].strs, rowslen);
+            for (i32 r = 0; r < rowslen; r++) {
+                Value_Str sv = buf_readSV(&buf);
+                stbds_arrput(tab.vals[c].strs, sv);
+            }
+            break;
+        case TYPE_SELECT:
+            stbds_arrsetcap(tab.vals[c].selects, rowslen);
+            for (i32 r = 0; r < rowslen; r++) {
+                Value_Select idx = buf_read4i(&buf);
+                stbds_arrput(tab.vals[c].selects, idx);
+            }
+            break;
+        case TYPE_TAG:
+            stbds_arrsetcap(tab.vals[c].tags, rowslen);
+            for (i32 r = 0; r < rowslen; r++) {
+                Value_Tag tag = NULL;
+                i32 amount    = buf_read4i(&buf);
+                stbds_arrsetcap(tag, amount);
+                for (i32 k = 0; k < amount; k++) {
+                    i32 idx = buf_read4i(&buf);
+                    stbds_arrput(tag, idx);
+                }
+                stbds_arrput(tab.vals[c].tags, tag);
+            }
+            break;
+        case TYPE_DATE:
+            stbds_arrsetcap(tab.vals[c].dates, rowslen);
+            for (i32 r = 0; r < rowslen; r++) {
+                u8  d = buf_read1(&buf);
+                u8  m = buf_read1(&buf);
+                u16 y = buf_read2(&buf);
+                Value_Date date = { .day = d, .month = m, .year = y };
+                stbds_arrput(tab.vals[c].dates, date);
+            }
+            break;
+        default:
+            PANIC("Unexpected column type '%d' in reading table file %s", tab.cols[c].type, fpath);
+        }
+    }
+    buf_free(buf);
     return tab;
 }
 
 bool writeTabFile(const char *fpath, Table table)
 {
-    (void)fpath;
-    (void)table;
-    // @TODO: Rewrite to use buffer
-    i32 colslen    = stbds_arrlen(table.cols);
-    char *cols_buf = malloc(colslen * sizeof(Type_Opts));
-    u32 row_size   = 0;
-    (void)row_size;
-    u32 buf_idx    = 0;
+    i32 colslen = stbds_arrlen(table.cols);
+    Buffer buf  = buf_new(64 * 1028);
+    buf_write4i(&buf, colslen);
     for (i32 i = 0; i < colslen; i++) {
-        Column col = table.cols[i];
-        cols_buf[buf_idx++] = col.type;
-        STATIC_ASSERT(TYPE_LEN == 4);
-        switch (col.type)
+        buf_writeColumn(&buf, table.cols[i]);
+    }
+    i32 rowslen     = 0;
+    u64 rowslen_idx = buf.idx;
+    buf_write4i(&buf, rowslen);
+    for (i32 i = 0; i < colslen; i++) {
+        Values col = table.vals[i];
+        switch (table.cols[i].type)
         {
-        case TYPE_SELECT:
-        case TYPE_TAG:
-            STATIC_ASSERT(sizeof(size_t) == sizeof(char**));
-            size_t opts = (size_t) col.opts.strs;
-
-            // @TODO: Gotta store the strings too ugh
-            for (u32 j = 0; j < sizeof(char**); j++) {
-                cols_buf[buf_idx+j] = (char) (opts & (0xff << (j*8)));
+        case TYPE_STR:
+            rowslen = stbds_arrlen(col.strs);
+            for (i32 j = 0; j < rowslen; j++) {
+                Value_Str sv = col.strs[j];
+                buf_writeStr(&buf, sv.data, sv.count);
             }
-            buf_idx += sizeof(char**);
+            break;
+
+        case TYPE_SELECT:
+            rowslen = stbds_arrlen(col.selects);
+            for (i32 j = 0; j < rowslen; j++) {
+                Value_Select idx = col.selects[j];
+                buf_write4i(&buf, idx);
+            }
+            break;
+
+        case TYPE_TAG:
+            rowslen = stbds_arrlen(col.tags);
+            for (i32 j = 0; j < rowslen; j++) {
+                Value_Tag tags = col.tags[j];
+                i32 tagslen    = stbds_arrlen(tags);
+                buf_write4i(&buf, tagslen);
+                for (i32 k = 0; k < tagslen; k++) {
+                    buf_write4i(&buf, tags[k]);
+                }
+            }
+            break;
+
+        case TYPE_DATE:
+            rowslen = stbds_arrlen(col.dates);
+            for (i32 j = 0; j < rowslen; j++) {
+                Value_Date date = col.dates[j];
+                buf_write1(&buf, date.day);
+                buf_write1(&buf, date.month);
+                buf_write2(&buf, date.year);
+            }
             break;
         default:
-            break;
+            PANIC("Unexpected column type '%d' in writing table file %s", table.cols[i].type, fpath);
         }
     }
-    u64 cols_size = buf_idx;
-    buf_idx       = 0;
-    (void)cols_size;
-
-    for (i32 i = 0; i < colslen; i++) {
-
-    }
-
-    TODO();
+    *((i32*)(&buf.data[rowslen_idx])) = rowslen;
+    return buf_toFile(&buf, fpath);
 }
 
 // Assumes that the file under the path fpath exists and can be read from
 // Assumes all '.tab' files to be in the current directory
 Table_Defs readDefFile(const char *fpath)
 {
-    u64 size;
-    char *buf = util_readFile(fpath, &size);
+    Buffer buf = buf_fromFile(fpath);
     Table_Defs td = { .names = NULL, .tabs = NULL };
 
-    u64 i = 0;
-    while (i < size) {
+    while (buf_iter_cond(buf)) {
         Table table = { .cols = NULL, .vals = NULL };
-        String_View name = {
-            .count = (size_t) buf[i],
-            .data  = malloc(buf[i])
-        };
-        memcpy(name.data, &buf[i+1], name.count);
+        String_View name = buf_readSV(&buf);
 
         char *tab_fname = util_memadd(name.data, name.count, ".tab", 5);
         if (FileExists(tab_fname)) table = readTabFile(tab_fname);
@@ -101,37 +160,35 @@ Table_Defs readDefFile(const char *fpath)
 
         stbds_arrput(td.tabs, table);
         stbds_arrput(td.names, name);
-        i += name.count + 1;
     }
 
-    free(buf);
+    buf_free(buf);
     return td;
 }
 
-// Also writes the '.tab' files for each table in td into the current working directory
+// If `write_tables` is true, it writes the '.tab' files for each table in td into the current working directory
 // To write everything into the same directory, you should therefore change into that directory first before calling this function
-bool writeDefFile(const char *fpath, Table_Defs td)
+bool writeDefFile(const char *fpath, Table_Defs td, bool write_tables)
 {
     u64 size = 0;
     i32 len  = stbds_arrlen(td.names);
     for (i32 i = 0; i < len; i++) {
         size += 1 + td.names[i].count;
     }
+    Buffer buf = buf_new(size);
+    for (i32 i = 0; i < len; i++) {
+        String_View name = td.names[i];
+        buf_writeStr(&buf, name.data, name.count);
 
-    char *buf = malloc(size);
-    for (i32 i = 0, j = 0; j < len; j++) {
-        String_View name = td.names[j];
-        buf[i] = (u8) name.count;
-        memcpy(&buf[i+1], name.data, name.count);
-        i += 1 + name.count;
-
-        char *tab_fname = util_memadd(name.data, name.count, ".tab", 5);
-        bool res = writeTabFile(tab_fname, td.tabs[j]);
-        free(tab_fname);
-        if (!res) return false;
+        if (write_tables) {
+            char *tab_fname = util_memadd(name.data, name.count, ".tab", 5);
+            bool res = writeTabFile(tab_fname, td.tabs[i]);
+            free(tab_fname);
+            if (!res) return false;
+        }
     }
-    if (!util_writeFile(fpath, buf, size)) return false;
-    return true;
+    printf("Buffer Size: %lld\n", buf.size);
+    return buf_toFile(&buf, fpath);
 }
 
 int main(void)
@@ -153,11 +210,16 @@ int main(void)
     Table_Defs td = { .names = NULL, .tabs = NULL };
     if (!DirectoryExists("./data")) mkdir("./data");
     chdir("./data");
-    if (FileExists("./td.def")) td = readDefFile("./td.def");
+    if (FileExists("./tables.def")) td = readDefFile("./tables.def");
+    else {
+        // @TODO: Only for debugging at the beginning now
+        stbds_arrput(td.names, sv_from_cstr("Test"));
+        stbds_arrput(td.tabs,  (Table) {0});
+        stbds_arrput(td.names, sv_from_cstr("Table 2"));
+        stbds_arrput(td.tabs,  (Table) {0});
+        writeDefFile("./tables.def", td, true);
+    }
     chdir("..");
-
-    stbds_arrput(td.names, sv_from_cstr("Test"));
-    stbds_arrput(td.tabs,  (Table) {0});
 
     while (!WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) {
         BeginDrawing();
