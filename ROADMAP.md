@@ -1,0 +1,11 @@
+-   [ ] Create CRUD functions for Tables
+    -   [ ] Function to create table
+    -   [ ] Function to update table
+    -   [ ] Function to delete table
+-   [ ] Show Tables in UI
+    -   [ ] Function to display a table in the UI
+    -   [ ] Allow switching between tables in UI
+    -   [ ] Button to create new Table
+    -   [ ] Buttons in UI to update Tables
+    -   [ ] ...
+-   [ ] ...
