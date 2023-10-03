@@ -32,4 +32,4 @@ if defined BUILD_ALL (
 
 :: Build rl.c
 cmd /c if exist bin\rl.exe del /F bin\rl.exe
-gcc %CFLAGS% %DEV_FLAGS% -o bin/rl src/main.c %DEP%
+gcc %CFLAGS% %DEV_FLAGS% -o bin/rl src/main.c %DEPS%
