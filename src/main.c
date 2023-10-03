@@ -19,14 +19,20 @@
 #define STBDS_NO_SHORT_NAMES
 #include "stb_ds.h"  // For dynamic arrays
 
+const char TD_FILENAME[] = "./tables.def";
+
 
 ///////////////
 // Functions //
 ///////////////
 
-Table readTabFile(const char *fpath)
+Table readTabFile(String_View tablename)
 {
-    Buffer buf = buf_fromFile(fpath);
+    char *filename = util_memadd(tablename.data, tablename.count, ".tab", 5);
+    if (!FileExists(filename)) return (Table) {0};
+    Buffer buf = buf_fromFile(filename);
+    free(filename);
+
     Table tab = { .cols = NULL, .vals = NULL };
     i32 colslen = buf_read4i(&buf);
     stbds_arrsetcap(tab.cols, colslen);
@@ -76,14 +82,14 @@ Table readTabFile(const char *fpath)
             }
             break;
         default:
-            PANIC("Unexpected column type '%d' in reading table file %s", tab.cols[c].type, fpath);
+            PANIC("Unexpected column type '%d' in reading table file %s", tab.cols[c].type, tablename.data);
         }
     }
     buf_free(buf);
     return tab;
 }
 
-bool writeTabFile(const char *fpath, Table table)
+bool writeTabFile(String_View tablename, Table table)
 {
     i32 colslen = stbds_arrlen(table.cols);
     Buffer buf  = buf_new(64 * 1028);
@@ -136,11 +142,14 @@ bool writeTabFile(const char *fpath, Table table)
             }
             break;
         default:
-            PANIC("Unexpected column type '%d' in writing table file %s", table.cols[i].type, fpath);
+            PANIC("Unexpected column type '%d' in writing table '%s'", table.cols[i].type, tablename.data);
         }
     }
     *((i32*)(&buf.data[rowslen_idx])) = rowslen;
-    return buf_toFile(&buf, fpath);
+    char *filename = util_memadd(tablename.data, tablename.count, ".tab", 5);
+    bool out = buf_toFile(&buf, filename);
+    free(filename);
+    return out;
 }
 
 // Assumes that the file under the path fpath exists and can be read from
@@ -151,13 +160,8 @@ Table_Defs readDefFile(const char *fpath)
     Table_Defs td = { .names = NULL, .tabs = NULL };
 
     while (buf_iter_cond(buf)) {
-        Table table = { .cols = NULL, .vals = NULL };
         String_View name = buf_readSV(&buf);
-
-        char *tab_fname = util_memadd(name.data, name.count, ".tab", 5);
-        if (FileExists(tab_fname)) table = readTabFile(tab_fname);
-        free(tab_fname);
-
+        Table table = readTabFile(name);
         stbds_arrput(td.tabs, table);
         stbds_arrput(td.names, name);
     }
@@ -180,15 +184,147 @@ bool writeDefFile(const char *fpath, Table_Defs td, bool write_tables)
         String_View name = td.names[i];
         buf_writeStr(&buf, name.data, name.count);
 
-        if (write_tables) {
-            char *tab_fname = util_memadd(name.data, name.count, ".tab", 5);
-            bool res = writeTabFile(tab_fname, td.tabs[i]);
-            free(tab_fname);
-            if (!res) return false;
-        }
+        if (write_tables && !writeTabFile(name, td.tabs[i])) return false;
     }
-    printf("Buffer Size: %lld\n", buf.size);
     return buf_toFile(&buf, fpath);
+}
+
+i32 getTableRowsLen(Table table)
+{
+    if (UNLIKELY(stbds_arrlen(table.vals)) == 0) return 0;
+    switch (table.cols[0].type)
+    {
+    case TYPE_STR:
+        return stbds_arrlen(table.vals[0].strs);
+    case TYPE_SELECT:
+        return stbds_arrlen(table.vals[0].selects);
+    case TYPE_TAG:
+        return stbds_arrlen(table.vals[0].tags);
+    case TYPE_DATE:
+        return stbds_arrlen(table.vals[0].dates);
+    case TYPE_LEN:
+        PANIC("Received illegal column type 'len'");
+    }
+    return 0;
+}
+
+Table newTable(Table_Defs *td, String_View name)
+{
+    Table out = {0};
+    stbds_arrput(td->names, name);
+    stbds_arrput(td->tabs,  out);
+    // Save new table
+    chdir("./data");
+    writeTabFile(name, out);
+    writeDefFile(TD_FILENAME, *td, false);
+    chdir("..");
+    return out;
+}
+
+bool addColumn(Table_Defs td, u32 tdidx, String_View name, Datatype type)
+{
+    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
+    Table *table = &td.tabs[tdidx];
+    i32 rowslen = getTableRowsLen(*table);
+    Column col = {0};
+    col.name = name;
+    col.type = type;
+    stbds_arrput(table->cols, col);
+
+    // Fill column in all rows with default value
+    Values vals = {0};
+    switch (type)
+    {
+    case TYPE_STR:
+        stbds_arrsetcap(vals.strs, rowslen);
+        stbds_arrput(vals.strs, (Value_Str) {0});
+        memset(vals.strs, 0, rowslen * sizeof(Value_Str));
+        break;
+    case TYPE_SELECT:
+        stbds_arrsetcap(vals.selects, rowslen);
+        memset(vals.selects, -1, rowslen * sizeof(Value_Select));
+        break;
+    case TYPE_TAG:
+        stbds_arrsetcap(vals.tags, rowslen);
+        memset(vals.tags, 0, rowslen * sizeof(Value_Tag));
+        break;
+    case TYPE_DATE:
+        stbds_arrsetcap(vals.strs, rowslen);
+        memset(vals.strs, 0, rowslen * sizeof(Value_Date));
+        break;
+    case TYPE_LEN:
+        PANIC("Cannot add a column of type 'len'");
+    }
+    stbds_arrput(table->vals, vals);
+
+    // Save updated Table
+    chdir("./data");
+    bool out = writeTabFile(td.names[tdidx], *table);
+    chdir("..");
+    return out;
+}
+
+bool rmColumn(Table_Defs td, u32 tdidx, u32 colidx)
+{
+    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
+    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen(table->cols) <= colidx)) return false;
+
+    // @Memory: This is probably leaking memory. I probably have to go through each row and manually free everything there -_-
+    stbds_arrdel(table->vals, colidx);
+    stbds_arrdel(table->cols, colidx);
+
+    chdir("./data");
+    bool out = writeTabFile(td.names[tdidx], *table);
+    chdir("..");
+    return out;
+}
+
+bool renameColumn(Table_Defs td, u32 tdidx, u32 colidx, String_View newname)
+{
+    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
+    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen(table->cols) <= colidx)) return false;
+    Column col = table->cols[colidx];
+    free(col.name.data);
+    col.name = newname;
+
+    chdir("./data");
+    bool out = writeTabFile(td.names[tdidx], *table);
+    chdir("..");
+    return out;
+}
+
+// Add options to a column of type SELECT or TAG
+bool addOptSelectableColumn(Table_Defs td, u32 tdidx, u32 colidx, String_View sv)
+{
+    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
+    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen(table->cols) <= colidx)) return false;
+    Column col = table->cols[colidx];
+    stbds_arrput(col.opts.strs, sv);
+
+    chdir("./data");
+    bool out = writeTabFile(td.names[tdidx], *table);
+    chdir("..");
+    return out;
+}
+
+bool renameTable(Table_Defs td, u32 idx, String_View new_name)
+{
+    if (UNLIKELY(stbds_arrlen(td.tabs) <= idx)) return false;
+    String_View old_name = td.names[idx];
+    td.names[idx] = new_name;
+    chdir("./data");
+    if (UNLIKELY(!writeDefFile(TD_FILENAME, td, false))) return false;
+    char *old_fname = util_memadd(old_name.data, old_name.count, ".tab", 5);
+    char *new_fname = util_memadd(new_name.data, new_name.count, ".tab", 5);
+    i32 out = rename(old_fname, new_fname);
+    free(old_fname);
+    free(new_fname);
+    // free(old_name.data);
+    chdir("..");
+    return out == 0;
 }
 
 int main(void)
@@ -210,16 +346,21 @@ int main(void)
     Table_Defs td = { .names = NULL, .tabs = NULL };
     if (!DirectoryExists("./data")) mkdir("./data");
     chdir("./data");
-    if (FileExists("./tables.def")) td = readDefFile("./tables.def");
-    else {
+    if (FileExists(TD_FILENAME)) {
+        td = readDefFile(TD_FILENAME);
+        chdir("..");
+    } else {
         // @TODO: Only for debugging at the beginning now
-        stbds_arrput(td.names, sv_from_cstr("Test"));
-        stbds_arrput(td.tabs,  (Table) {0});
-        stbds_arrput(td.names, sv_from_cstr("Table 2"));
-        stbds_arrput(td.tabs,  (Table) {0});
-        writeDefFile("./tables.def", td, true);
+        chdir("..");
+        newTable(&td, sv_from_cstr("Books"));
+        addColumn(td, 0, sv_from_cstr("Name"), TYPE_STR);
+        renameTable(td, 0, sv_from_cstr("Reading List"));
+        addColumn(td, 0, sv_from_cstr("Author"), TYPE_TAG);
+        addOptSelectableColumn(td, 0, 1, sv_from_cstr("Errico Malateste"));
+        addOptSelectableColumn(td, 0, 1, sv_from_cstr("Karl Marx"));
+        newTable(&td, sv_from_cstr("Uni Courses"));
+        writeDefFile(TD_FILENAME, td, true);
     }
-    chdir("..");
 
     while (!WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) {
         BeginDrawing();

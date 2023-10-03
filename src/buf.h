@@ -245,6 +245,7 @@ Column buf_readColumn(Buffer *buf)
 {
 	Column col = {0};
 	col.type = buf_read1(buf);
+	col.name = buf_readSV(buf);
 
 	STATIC_ASSERT(TYPE_LEN == 4);
 	switch (col.type)
@@ -271,6 +272,7 @@ Column buf_readColumn(Buffer *buf)
 void buf_writeColumn(Buffer *buf, Column elem)
 {
 	buf_write1(buf, elem.type);
+	buf_writeStr(buf, elem.name.data, elem.name.count);
 	STATIC_ASSERT(TYPE_LEN == 4);
 	switch (elem.type)
 	{
@@ -289,7 +291,8 @@ void buf_writeColumn(Buffer *buf, Column elem)
 	default:
 		break;
 	}
-	if (LIKELY(buf->idx > buf->size)) buf->size = buf->idx;
+	// Only necessary when writing to buffer without using write() functions, as they already update the buffer's size
+	// if (LIKELY(buf->idx > buf->size)) buf->size = buf->idx;
 }
 
 
