@@ -33,6 +33,20 @@ typedef struct {
     i16 year; // Negative years are BC    | 0 is interpreted as an empty date
 } Value_Date;
 
+#define VALUE_DEFAULT_STR     0
+#define VALUE_DEFAULT_SELECT -1
+#define VALUE_DEFAULT_TAG     0
+#define VALUE_DEFAULT_DATE    0
+
+typedef union {
+    Value_Str    str;
+    Value_Select select;
+    Value_Tag    tag;
+    Value_Date   date;
+} Value;
+
+// @Note: Having a union of arrays instead of an array of unions, decreases memory usage,
+// as every element in the array doesn't have to use the maximal size for the union
 typedef union {
     Value_Str    *strs;
     Value_Select *selects;
