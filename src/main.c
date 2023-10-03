@@ -8,6 +8,7 @@
 #include <assert.h>    // For assert
 #include <string.h>    // For memcpy
 #include "raylib.h"    // For immediate UI framework
+#include "raygui.h"
 
 #define UTIL_IMPLEMENTATION
 #include "util.h"
