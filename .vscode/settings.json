@@ -15,6 +15,10 @@
 		"Command Prompt": null
 	},
 	"files.associations": {
-		"*.h": "c"
+		"*.pl": "prolog",
+		"*.rb": "ruby",
+		"*.h": "c",
+		"typeinfo": "c",
+		"random": "c"
 	}
 }
