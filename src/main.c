@@ -89,7 +89,7 @@ Table readTabFile(String_View tablename)
     return tab;
 }
 
-bool writeTabFile(String_View tablename, Table table)
+bool writeTabFile(String_View tablename, Table table, char *dir)
 {
     i32 colslen = stbds_arrlen(table.cols);
     Buffer buf  = buf_new(64 * 1028);
@@ -145,10 +145,13 @@ bool writeTabFile(String_View tablename, Table table)
             PANIC("Unexpected column type '%d' in writing table '%s'", table.cols[i].type, tablename.data);
         }
     }
+
+    if (dir != NULL) chdir(dir);
     *((i32*)(&buf.data[rowslen_idx])) = rowslen;
     char *filename = util_memadd(tablename.data, tablename.count, ".tab", 5);
     bool out = buf_toFile(&buf, filename);
     free(filename);
+    if (dir != NULL) chdir("..");
     return out;
 }
 
@@ -184,7 +187,7 @@ bool writeDefFile(const char *fpath, Table_Defs td, bool write_tables)
         String_View name = td.names[i];
         buf_writeStr(&buf, name.data, name.count);
 
-        if (write_tables && !writeTabFile(name, td.tabs[i])) return false;
+        if (write_tables && !writeTabFile(name, td.tabs[i], NULL)) return false;
     }
     return buf_toFile(&buf, fpath);
 }
@@ -215,7 +218,7 @@ Table newTable(Table_Defs *td, String_View name)
     stbds_arrput(td->tabs,  out);
     // Save new table
     chdir("./data");
-    writeTabFile(name, out);
+    writeTabFile(name, out, NULL);
     writeDefFile(TD_FILENAME, *td, false);
     chdir("..");
     return out;
@@ -223,8 +226,8 @@ Table newTable(Table_Defs *td, String_View name)
 
 bool addColumn(Table_Defs td, u32 tdidx, String_View name, Datatype type)
 {
-    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
-    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen((td).tabs) <= (tdidx))) return false;
+    Table *table = &(td).tabs[(tdidx)];;
     i32 rowslen = getTableRowsLen(*table);
     Column col = {0};
     col.name = name;
@@ -256,58 +259,41 @@ bool addColumn(Table_Defs td, u32 tdidx, String_View name, Datatype type)
         PANIC("Cannot add a column of type 'len'");
     }
     stbds_arrput(table->vals, vals);
-
-    // Save updated Table
-    chdir("./data");
-    bool out = writeTabFile(td.names[tdidx], *table);
-    chdir("..");
-    return out;
+    return writeTabFile(td.names[tdidx], *table, "./data");
 }
 
 bool rmColumn(Table_Defs td, u32 tdidx, u32 colidx)
 {
-    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
-    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen((td).tabs) <= (tdidx))) return false;
+    Table *table = &(td).tabs[(tdidx)];;
     if (UNLIKELY(stbds_arrlen(table->cols) <= colidx)) return false;
 
     // @Memory: This is probably leaking memory. I probably have to go through each row and manually free everything there -_-
     stbds_arrdel(table->vals, colidx);
     stbds_arrdel(table->cols, colidx);
-
-    chdir("./data");
-    bool out = writeTabFile(td.names[tdidx], *table);
-    chdir("..");
-    return out;
+    return writeTabFile(td.names[tdidx], *table, "./data");
 }
 
 bool renameColumn(Table_Defs td, u32 tdidx, u32 colidx, String_View newname)
 {
-    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
-    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen((td).tabs) <= (tdidx))) return false;
+    Table *table = &(td).tabs[(tdidx)];;
     if (UNLIKELY(stbds_arrlen(table->cols) <= colidx)) return false;
     Column col = table->cols[colidx];
     free(col.name.data);
     col.name = newname;
-
-    chdir("./data");
-    bool out = writeTabFile(td.names[tdidx], *table);
-    chdir("..");
-    return out;
+    return writeTabFile(td.names[tdidx], *table, "./data");
 }
 
 // Add options to a column of type SELECT or TAG
 bool addOptSelectableColumn(Table_Defs td, u32 tdidx, u32 colidx, String_View sv)
 {
-    if (UNLIKELY(stbds_arrlen(td.tabs) <= tdidx)) return false;
-    Table *table = &td.tabs[tdidx];
+    if (UNLIKELY(stbds_arrlen((td).tabs) <= (tdidx))) return false;
+    Table *table = &(td).tabs[(tdidx)];;
     if (UNLIKELY(stbds_arrlen(table->cols) <= colidx)) return false;
     Column col = table->cols[colidx];
     stbds_arrput(col.opts.strs, sv);
-
-    chdir("./data");
-    bool out = writeTabFile(td.names[tdidx], *table);
-    chdir("..");
-    return out;
+    return writeTabFile(td.names[tdidx], *table, "./data");
 }
 
 bool renameTable(Table_Defs td, u32 idx, String_View new_name)
