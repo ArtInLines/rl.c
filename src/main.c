@@ -14,6 +14,8 @@
 #include "util.h"
 #define BUF_IMPLEMENTATION
 #include "buf.h"
+#define GUI_IMPLEMENTATION
+#include "gui.h"
 #define SV_IMPLEMENTATION
 #include "sv.h"
 #define STB_DS_IMPLEMENTATION
@@ -390,11 +392,29 @@ int main(void)
     InitWindow(win_width, win_height, "RL");
     SetTargetFPS(60);
 
+    UI_View  view  = UI_STATE_START;
+    UI_State state = {0};
+
+    float spacing      = 2;
+    float padding      = 5;
+    float margin       = 8;
     float size_default = 50;
     float size_max     = size_default;
-    float spacing      = 2;
-    float margin       = 5;
     Font font = LoadFontEx("./assets/Roboto-Regular.ttf", size_max, NULL, 95);
+
+    Gui_El_Style style_default = {
+        .bg = LIGHTGRAY,
+        .border_color = BLANK,
+        .border_width = 5,
+        .color = BLACK,
+        .font = font,
+        .font_size = size_default,
+        .pad = 2*padding,
+        .spacing = spacing,
+    };
+    Gui_El_Style style_hover = gui_cloneStyle(style_default);
+    style_hover.border_color = BLUE;
+    (void)style_hover;
 
     // Read Data
     Table_Defs td = { .names = NULL, .tabs = NULL };
@@ -405,39 +425,97 @@ int main(void)
         chdir("..");
     } else {
         // @TODO: Only for debugging at the beginning now
+        // Can be removed once all of these functions can be done via the UI
         chdir("..");
-        newTable(&td, sv_from_cstr("Books"));
-        addColumn(td, 0, sv_from_cstr("Name"), TYPE_STR);
-        renameTable(td, 0, sv_from_cstr("Reading List"));
-        addRow(td, 0);
-        addRow(td, 0);
-        addColumn(td, 0, sv_from_cstr("Author"), TYPE_TAG);
-        addOptSelectableColumn(td, 0, 1, sv_from_cstr("Errico Malateste"));
-        addOptSelectableColumn(td, 0, 1, sv_from_cstr("Karl Marx"));
-        newTable(&td, sv_from_cstr("Uni Courses"));
-        Value val = { .tag = NULL };
-        stbds_arrput(val.tag, 1);
-        stbds_arrput(val.tag, 0);
-        setValue(td, 0, 1, 1, val);
+        // newTable(&td, sv_from_cstr("Books"));
+        // addColumn(td, 0, sv_from_cstr("Name"), TYPE_STR);
+        // renameTable(td, 0, sv_from_cstr("Reading List"));
+        // addRow(td, 0);
+        // addRow(td, 0);
+        // addColumn(td, 0, sv_from_cstr("Author"), TYPE_TAG);
+        // addOptSelectableColumn(td, 0, 1, sv_from_cstr("Errico Malateste"));
+        // addOptSelectableColumn(td, 0, 1, sv_from_cstr("Karl Marx"));
+        // newTable(&td, sv_from_cstr("Uni Courses"));
+        // Value val = { .tag = NULL };
+        // stbds_arrput(val.tag, 1);
+        // stbds_arrput(val.tag, 0);
+        // setValue(td, 0, 1, 1, val);
     }
 
     while (!WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) {
         BeginDrawing();
 
-        if (IsWindowResized()) {
+        bool isResized = IsWindowResized();
+        if (isResized) {
             win_width  = GetScreenWidth();
             win_height = GetScreenHeight();
         }
         ClearBackground(BLACK);
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT); // Reset to default
 
-        int tables_amount = stbds_arrlen(td.names);
-        int total_height  = tables_amount * size_default + (tables_amount - 1) * margin;
-        int text_y        = MAX(((win_height - total_height)/2), margin);
-        for (int i = 0; i < tables_amount && text_y + size_default + margin < win_height; i++, text_y += size_default + margin) {
-            const char *table_name = td.names[i].data;
-            int   text_width = MeasureTextEx(font, table_name, size_default, spacing).x;
-            Vector2 v = { .x = (win_width - text_width)/2, .y = text_y };
-            DrawTextEx(font, table_name, v, size_default, spacing, WHITE);
+        switch (view)
+        {
+        case UI_STATE_START: {
+            // List all tables in center of screen
+            i32 tables_amount = stbds_arrlen(td.names);
+            i32 total_height  = tables_amount * size_default + (tables_amount - 1) * margin;
+            i32 text_y        = MAX(((win_height - total_height)/2), margin);
+            i32 max_width     = 0;
+            i32 *text_widths  = malloc((tables_amount + 1) * sizeof(i32));
+            Vector2 mouse     = GetMousePosition();
+
+            for (i32 i = -1; i < tables_amount; i++) {
+                char *table_name = i == -1 ? "New Table" : td.names[i].data;
+                text_widths[i+1] = MeasureTextEx(font, table_name, size_default, spacing).x;
+                if (text_widths[i+1] > max_width) max_width = text_widths[i+1];
+            }
+
+            for (i32 i = -1; i < tables_amount && text_y + size_default + margin < win_height; i++, text_y += size_default + margin + 2*padding) {
+                char *table_name = i == -1 ? "New Table" : td.names[i].data;
+                i32   text_width = text_widths[i+1];
+                Vector2   v      = { .x = (win_width - text_width)/2, .y = text_y + padding };
+                Rectangle r      = { .x = (win_width - max_width)/2 - padding, .y = text_y, .width = max_width + 2*padding, .height = size_default + 2*padding };
+                DrawRectangleRounded(r, 0.5f, 4, i == -1 ? GREEN : GRAY);
+                DrawTextEx(font, table_name, v, size_default, spacing, WHITE);
+                if (mouse.x >= r.x && mouse.x <= r.x + r.width && mouse.y >= r.y && mouse.y <= r.y + r.height) {
+                    // Mouse is hovering the button
+                    SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        if (i == -1) {
+                            view  = UI_STATE_NEW_TABLE;
+                            state.newtable.input = gui_newInputBox("Tablename", false, false, true, gui_newCenteredLabel((Rectangle){.x=0, .y=0, .width=win_width, .height=win_height}, win_width/2, NULL, style_default, style_default));
+                        } else {
+                            view = UI_STATE_TABLE;
+                            state.table.tdidx = i;
+                        }
+                    }
+                }
+            }
+            break;
+        }
+
+        case UI_STATE_NEW_TABLE: {
+            state.newtable.input.selected = true;
+            if (isResized) gui_centerLabel(&state.newtable.input.label, (Rectangle){.x=0, .y=0, .width=win_width, .height=win_height}, win_width/2);
+
+            gui_drawInputBox(&state.newtable.input);
+            if (IsKeyPressed(KEY_ENTER)) {
+                char *name = state.newtable.input.label.text;
+                if (stbds_arrlen(name) > 1) {
+                    newTable(&td, sv_from_cstr(name));
+                    view = UI_STATE_START; // UI_STATE_TABLE;
+                    state = (UI_State) {0};
+                }
+            } else if (IsKeyPressed(KEY_ESCAPE)) {
+                view = UI_STATE_START;
+                state = (UI_State) {0};
+            }
+            break;
+        }
+
+        case UI_STATE_TABLE: {
+            TODO();
+        }
         }
 
         EndDrawing();

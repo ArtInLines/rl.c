@@ -61,7 +61,8 @@ Gui_El_Style gui_cloneStyle(Gui_El_Style self);
 void gui_drawSized(Gui_El_Style style, i32 x, i32 y, i32 w, i32 h, const char *text);
 Vector3* gui_drawSizedEx(Gui_El_Style style, i32 x, i32 y, i32 w, i32 h, const char *text, u32 text_len);
 Gui_Label gui_newLabel(i32 x, i32 y, char *text, Gui_El_Style defaultStyle, Gui_El_Style hovered);
-void gui_centerLabel(Gui_Label *self, i32 w, i32 h);
+Gui_Label gui_newCenteredLabel(Rectangle bounds, i32 w, char *text, Gui_El_Style defaultStyle, Gui_El_Style hovered);
+void gui_centerLabel(Gui_Label *self, Rectangle bounds, i32 w);
 void gui_rmCharLabel(Gui_Label *self, u32 idx);
 void gui_insertCharLabel(Gui_Label *self, i32 idx, char c);
 void gui_insertSliceLabel(Gui_Label *self, i32 idx, const char *slice, i32 slice_size);
@@ -201,25 +202,46 @@ Gui_Label gui_newLabel(i32 x, i32 y, char *text, Gui_El_Style defaultStyle, Gui_
 {
     Vector2 size     = MeasureTextEx(defaultStyle.font, text, defaultStyle.font_size, defaultStyle.spacing);
     char *arrList = NULL;
-    i32 text_len  = strlen(text);
+    i32 text_len  = text == NULL ? 0 : strlen(text);
     stbds_arrsetlen(arrList, text_len + 1);
-    memcpy(arrList, text, text_len + 1);
+    if (text_len > 0) memcpy(arrList, text, text_len + 1);
+    arrList[text_len] = 0;
 
     return (Gui_Label) {
         .x            = x - defaultStyle.pad,
         .y            = y - defaultStyle.pad,
         .w            = ((i32) size.x) + 2*defaultStyle.pad,
-        .h            = ((i32) size.y) + 2*defaultStyle.pad,
+        .h            = defaultStyle.font_size + 2*defaultStyle.pad,
         .text         = arrList,
         .defaultStyle = defaultStyle,
         .hovered      = hovered,
     };
 }
 
-void gui_centerLabel(Gui_Label *self, i32 w, i32 h)
+void gui_centerLabel(Gui_Label *self, Rectangle bounds, i32 w)
 {
-    self->x = self->x + (w - self->w)/2.0f;
-    self->y = self->y + (h - self->h)/2.0f;
+    self->x = bounds.x + (bounds.width  - self->w)/2.0f;
+    self->y = bounds.y + (bounds.height - self->h)/2.0f;
+}
+
+Gui_Label gui_newCenteredLabel(Rectangle bounds, i32 w, char *text, Gui_El_Style defaultStyle, Gui_El_Style hovered)
+{
+    char *extendable_text = NULL;
+    i32 text_len          = text == NULL ? 0 : strlen(text);
+    stbds_arrsetlen(extendable_text, text_len + 1);
+    if (text_len > 0) memcpy(extendable_text, text, text_len + 1);
+    extendable_text[text_len] = 0;
+
+    i32 h = defaultStyle.font_size + 2*defaultStyle.pad;
+    return (Gui_Label) {
+        .x            = bounds.x + (bounds.width  - w)/2.0f,
+        .y            = bounds.y + (bounds.height - h)/2.0f,
+        .w            = w,
+        .h            = h,
+        .text         = extendable_text,
+        .defaultStyle = defaultStyle,
+        .hovered      = hovered,
+    };
 }
 
 void gui_rmCharLabel(Gui_Label *self, u32 idx)

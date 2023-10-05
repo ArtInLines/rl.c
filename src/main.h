@@ -2,6 +2,7 @@
 #define MAIN_H_
 
 #include "util.h"
+#include "gui.h"
 #include "sv.h"
 
 typedef enum __attribute__((__packed__)) {
@@ -64,5 +65,22 @@ typedef struct {
     Table       *tabs;
     String_View *names;
 } Table_Defs;
+
+typedef enum __attribute__((__packed__)) {
+    UI_STATE_START,
+    UI_STATE_TABLE,
+    UI_STATE_NEW_TABLE,
+} UI_View;
+
+typedef union {
+    struct {
+        u32 tdidx;
+        u32 colidx;
+        u32 rowidx;
+    } table;
+    struct {
+        Gui_Input_Box input;
+    } newtable;
+} UI_State;
 
 #endif // MAIN_H_
