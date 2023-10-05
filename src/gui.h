@@ -146,7 +146,7 @@ void gui_drawSized(Gui_El_Style style, i32 x, i32 y, i32 w, i32 h, const char *t
         DrawRectangle(x - style.border_width, y - style.border_width, w + 2*style.border_width, h + 2*style.border_width, style.border_color);
     }
     DrawRectangle(x, y, w, h, style.bg);
-    DrawTextEx(style.font, text, (Vector2) { .x = (float)(x + style.pad), .y = (float)(y + style.pad) }, style.font_size, style.spacing, style.color);
+    if (text != NULL) DrawTextEx(style.font, text, (Vector2) { .x = (float)(x + style.pad), .y = (float)(y + style.pad) }, style.font_size, style.spacing, style.color);
 }
 
 /// Same as gui_drawSized, except it returns an array of coordinates for each byte in the drawn text

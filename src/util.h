@@ -54,6 +54,7 @@
 #define SWAP(x, y) do { __typeof__(x) _swap_tmp_ = x; x = y; y = _swap_tmp_; } while (0)
 #define PANIC(...) do { printf(__VA_ARGS__); printf("\n"); exit(1); } while (0)
 #define TODO() do { printf("Hit TODO in " __FILE__ ":" STR_LINE "\n"); exit(1); } while(0)
+#define UNREACHABLE() do { printf("Reached an unreachable place in " __FILE__ ":" STR_LINE "\n"); exit(1); } while(0)
 #define STATIC_ASSERT_MSG(expr, msg) { extern int __attribute__((error("assertion failure: '" #msg "' in " __FILE__ ":" STR_LINE))) compile_time_check(); ((expr)?0:compile_time_check()),(void)0; }
 #define STATIC_ASSERT(expr) STATIC_ASSERT_MSG(expr, #expr);
 

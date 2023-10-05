@@ -49,25 +49,25 @@ Table readTabFile(String_View tablename)
         switch (tab.cols[c].type)
         {
         case TYPE_STR:
-            stbds_arrsetlen(tab.vals[c].strs, rowslen);
+            stbds_arrsetcap(tab.vals[c].strs, rowslen);
             for (i32 r = 0; r < rowslen; r++) {
                 Value_Str sv = buf_readSV(&buf);
                 stbds_arrput(tab.vals[c].strs, sv);
             }
             break;
         case TYPE_SELECT:
-            stbds_arrsetlen(tab.vals[c].selects, rowslen);
+            stbds_arrsetcap(tab.vals[c].selects, rowslen);
             for (i32 r = 0; r < rowslen; r++) {
                 Value_Select idx = buf_read4i(&buf);
                 stbds_arrput(tab.vals[c].selects, idx);
             }
             break;
         case TYPE_TAG:
-            stbds_arrsetlen(tab.vals[c].tags, rowslen);
+            stbds_arrsetcap(tab.vals[c].tags, rowslen);
             for (i32 r = 0; r < rowslen; r++) {
                 Value_Tag tag = NULL;
                 i32 amount    = buf_read4i(&buf);
-                stbds_arrsetlen(tag, amount);
+                stbds_arrsetcap(tag, amount);
                 for (i32 k = 0; k < amount; k++) {
                     i32 idx = buf_read4i(&buf);
                     stbds_arrput(tag, idx);
@@ -76,7 +76,7 @@ Table readTabFile(String_View tablename)
             }
             break;
         case TYPE_DATE:
-            stbds_arrsetlen(tab.vals[c].dates, rowslen);
+            stbds_arrsetcap(tab.vals[c].dates, rowslen);
             for (i32 r = 0; r < rowslen; r++) {
                 u8  d = buf_read1(&buf);
                 u8  m = buf_read1(&buf);
@@ -403,13 +403,13 @@ int main(void)
     Font font = LoadFontEx("./assets/Roboto-Regular.ttf", size_max, NULL, 95);
 
     Gui_El_Style style_default = {
-        .bg = LIGHTGRAY,
+        .bg = DARKGRAY,
         .border_color = BLANK,
         .border_width = 5,
-        .color = BLACK,
+        .color = WHITE,
         .font = font,
         .font_size = size_default,
-        .pad = 2*padding,
+        .pad = padding,
         .spacing = spacing,
     };
     Gui_El_Style style_hover = gui_cloneStyle(style_default);
@@ -427,19 +427,19 @@ int main(void)
         // @TODO: Only for debugging at the beginning now
         // Can be removed once all of these functions can be done via the UI
         chdir("..");
-        // newTable(&td, sv_from_cstr("Books"));
-        // addColumn(td, 0, sv_from_cstr("Name"), TYPE_STR);
-        // renameTable(td, 0, sv_from_cstr("Reading List"));
-        // addRow(td, 0);
-        // addRow(td, 0);
-        // addColumn(td, 0, sv_from_cstr("Author"), TYPE_TAG);
-        // addOptSelectableColumn(td, 0, 1, sv_from_cstr("Errico Malateste"));
-        // addOptSelectableColumn(td, 0, 1, sv_from_cstr("Karl Marx"));
-        // newTable(&td, sv_from_cstr("Uni Courses"));
-        // Value val = { .tag = NULL };
-        // stbds_arrput(val.tag, 1);
-        // stbds_arrput(val.tag, 0);
-        // setValue(td, 0, 1, 1, val);
+        newTable(&td, sv_from_cstr("Books"));
+        addColumn(td, 0, sv_from_cstr("Name"), TYPE_STR);
+        renameTable(td, 0, sv_from_cstr("Reading List"));
+        addRow(td, 0);
+        addRow(td, 0);
+        addColumn(td, 0, sv_from_cstr("Author"), TYPE_TAG);
+        addOptSelectableColumn(td, 0, 1, sv_from_cstr("Errico Malateste"));
+        addOptSelectableColumn(td, 0, 1, sv_from_cstr("Karl Marx"));
+        newTable(&td, sv_from_cstr("Uni Courses"));
+        Value val = { .tag = NULL };
+        stbds_arrput(val.tag, 1);
+        stbds_arrput(val.tag, 0);
+        setValue(td, 0, 1, 1, val);
     }
 
     while (!WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) {
@@ -514,7 +514,86 @@ int main(void)
         }
 
         case UI_STATE_TABLE: {
-            TODO();
+            i32 tdidx = state.table.tdidx;
+            DrawTextEx(font, td.names[tdidx].data, (Vector2){ .x = padding, .y = padding }, style_default.font_size, style_default.spacing, style_default.color);
+
+            Table table = td.tabs[tdidx];
+            i32 colslen = stbds_arrlen(table.cols);
+            i32 x = padding;
+            for (i32 i = 0; i <= colslen; i++) {
+                Gui_El_Style style = style_default;
+                char *colname = i == colslen ? "+" : table.cols[i].name.data;
+                i32 name_w    = MeasureTextEx(font, colname, style.font_size, spacing).x;
+                if (i == colslen) {
+                    style.bg = GREEN;
+                }
+
+                i32 y = 2*style.pad + style.font_size;
+                gui_drawSized(style, x, y, name_w+2*style.pad, style.font_size+2*style.pad, colname);
+
+                switch (table.cols[i].type)
+                {
+                case TYPE_STR:
+                    for (i32 j = 0; j < stbds_arrlen(table.vals[i].strs); j++) {
+                        y += 2*style.pad + style.font_size + margin;
+                        gui_drawSized(style, x, y, name_w+2*style.pad, style.font_size+2*style.pad, table.vals[i].strs[j].data);
+                    }
+                    break;
+
+                case TYPE_SELECT:
+                    for (i32 j = 0; j < stbds_arrlen(table.vals[i].selects); j++) {
+                        y += 2*style.pad + style.font_size + margin;
+                        Value_Select idx = table.vals[i].selects[j];
+                        if (idx >= 0) {
+                            String_View val = table.cols[i].opts.strs[idx];
+                            gui_drawSized(style, x, y, name_w+2*style.pad, style.font_size+2*style.pad, val.data);
+                        }
+                    }
+                    break;
+
+                case TYPE_TAG:
+                    for (i32 j = 0; j < stbds_arrlen(table.vals[i].tags); j++) {
+                        y += 2*style.pad + style.font_size + margin;
+                        Value_Tag tags  = table.vals[i].tags[j];
+                        String_View val = sv_from_parts(NULL, 0);
+                        for (i32 k = 0; k < stbds_arrlen(tags); k++) {
+                            String_View s = table.cols[i].opts.strs[tags[k]];
+                            if (val.data == NULL) {
+                                val.data  = malloc(sizeof(char) * (s.count + 1));
+                                memcpy(val.data, s.data, s.count + 1);
+                                val.count = s.count;
+                            }
+                            else {
+                                // s.count+1 to keep the ending 0 byte
+                                char *new_val = malloc(val.count + 2 + s.count + 1);
+                                memcpy(new_val, val.data, val.count);
+                                memcpy(&new_val[val.count], ", ", 2);
+                                memcpy(&new_val[val.count+2], s.data, s.count+1);
+                                free(val.data);
+                                val.data   = new_val;
+                                val.count += 2 + s.count;
+                            }
+                        }
+                        if (val.data == NULL) DrawRectangle(x, y, name_w+2*style.pad, style.font_size+2*style.pad, style.bg);
+                        else gui_drawSized(style, x, y, name_w+2*style.pad, style.font_size+2*style.pad, val.data);
+                    }
+                    break;
+
+                case TYPE_DATE:
+                    TODO();
+                    break;
+
+                case TYPE_LEN:
+                    UNREACHABLE();
+                }
+
+                x += name_w + 2*style.pad + margin;
+            }
+
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                view = UI_STATE_START;
+                state = (UI_State) {0};
+            }
         }
         }
 

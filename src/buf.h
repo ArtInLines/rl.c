@@ -218,7 +218,7 @@ void buf_write8i(Buffer *buf, i64 elem)
 
 String_View buf_peekSV(Buffer buf)
 {
-	u64 size   = *((u64*)(&buf.data[buf.idx]));
+	u64   size = *((u64*)(&buf.data[buf.idx]));
 	char *data = malloc(size + 1);
 	memcpy(data, &buf.data[buf.idx + sizeof(u64)], size);
 	data[size] = 0;
