@@ -5,7 +5,7 @@ CFLAGS="-Wall -Wextra -Wimplicit -Wpedantic -Wno-unused-function -std=c99"
 
 LIB_PATHS="-L./bin"
 INCLUDES="-I./deps/stb -I./deps/tsoding -I./deps/QuelSolaar -I./deps/raylib/src -I./deps/raygui/src"
-RAYLIB_DEP="-lraylib -lopengl32 -lgdi32 -lwinmm"
+RAYLIB_DEP="-lraylib -lm"
 RAYGUI_DEP="-lraygui"
 DEPS="$INCLUDES $LIB_PATHS $RAYLIB_DEP $RAYGUI_DEP"
 
